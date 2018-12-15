@@ -20,24 +20,21 @@
  * @date 2018
  */
 
-import {errors} from 'web3-core-helpers';
-import isFunction from 'underscore-es/isFunction';
 import isObject from 'underscore-es/isObject';
 import isArray from 'underscore-es/isArray';
+import JsonRpcResponseValidator from '../validators/JsonRpcResponseValidator';
 
 export default class BatchRequest {
     /**
+     * @param {AbstractWeb3Module} moduleInstance
      * @param {AbstractProviderAdapter} provider
-     * @param {JsonRpcMapper} jsonRpcMapper
-     * @param {JsonRpcResponseValidator} jsonRpcResponseValidator
      *
      * @constructor
      */
-    constructor(provider, jsonRpcMapper, jsonRpcResponseValidator) {
+    constructor(moduleInstance, provider) {
+        this.moduleInstance = moduleInstance;
         this.provider = provider;
-        this.jsonRpcMapper = jsonRpcMapper;
-        this.jsonRpcResponseValidator = jsonRpcResponseValidator;
-        this.requests = [];
+        this.methods = [];
     }
 
     /**
@@ -45,64 +42,68 @@ export default class BatchRequest {
      *
      * @method add
      *
-     * @param {Object} request
+     * @param {AbstractMethod} method
      */
-    add(request) {
-        this.requests.push(request);
+    add(method) {
+        if (!isObject(method)) {
+            throw new Error('Please provide a object of type AbstractMethod.');
+        }
+
+        this.methods.push(method);
     }
 
     /**
      * Should be called to execute batch request
      *
      * @method execute
+     *
+     * @returns Promise<{methods: AbstractMethod[], response: Object[]}|Error[]>
      */
     execute() {
-        this.provider.sendBatch(this.jsonRpcMapper.toBatchPayload(this.requests), (error, results) => {
-            this.requests.forEach(function(request, index) {
-                if (!error) {
-                    if (!isArray(results)) {
-                        request.callback(errors.InvalidResponse(results));
+        return this.provider.sendBatch(this.methods, this.moduleInstance)
+            .then(response => {
+                let errors = [];
+                this.methods.forEach((method, index) => {
+                    if (!isArray(response)) {
+                        method.callback(
+                            new Error(`Response should be of type Array but is: ${typeof response}`),
+                            null
+                        );
+
+                        errors.push(`Response should be of type Array but is: ${typeof response}`);
 
                         return;
                     }
 
-                    const result = results[index] || null;
+                    const responseItem = response[index] || null;
+                    const validationResult = JsonRpcResponseValidator.validate(responseItem);
 
-                    if (isFunction(request.callback)) {
-                        if (isObject(result) && result.error) {
-                            request.callback(errors.ErrorResponse(result));
-                        }
-
-                        if (!this.jsonRpcResponseValidator.isValid(result)) {
-                            request.callback(errors.InvalidResponse(result));
-                        }
-
+                    if (validationResult) {
                         try {
-                            const mappedResult = request.afterExecution(result.result);
-                            request.callback(null, mappedResult);
+                            const mappedResult = method.afterExecution(responseItem.result);
+
+                            response[index] = mappedResult;
+                            method.callback(false, mappedResult);
                         } catch (error) {
-                            request.callback(error, null);
+                            errors.push(error);
+                            method.callback(error, null);
                         }
+
+                        return;
                     }
 
-                    return;
+                    errors.push(validationResult);
+                    method.callback(validationResult, null);
+                });
+
+                if (errors.length > 0) {
+                    throw new Error(`BatchRequest error: ${JSON.stringify(errors)}`);
                 }
 
-                request.callback(error);
+                return {
+                    methods: this.methods,
+                    response
+                };
             });
-        });
-    }
-
-    /**
-     * Checks if the method has an outputFormatter defined
-     *
-     * @method hasOutputFormatter
-     *
-     * @param {Object} request
-     *
-     * @returns {Boolean}
-     */
-    hasOutputFormatter(request) {
-        return isFunction(request.methodModel.outputFormatter);
     }
 }

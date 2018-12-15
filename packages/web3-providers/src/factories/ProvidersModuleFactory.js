@@ -23,14 +23,12 @@
 import ProviderAdapterResolver from '../resolvers/ProviderAdapterResolver';
 import ProviderDetector from '../detectors/ProviderDetector';
 import SocketProviderAdapter from '../adapters/SocketProviderAdapter';
-import InpageProviderAdapter from '../adapters/InpageProviderAdapter';
 import HttpProviderAdapter from '../adapters/HttpProviderAdapter';
 import WebsocketProvider from '../providers/WebsocketProvider';
 import IpcProvider from '../providers/IpcProvider';
 import HttpProvider from '../providers/HttpProvider';
-import JsonRpcResponseValidator from '../validators/JsonRpcResponseValidator';
-import JsonRpcMapper from '../mappers/JsonRpcMapper';
 import BatchRequest from '../batch-request/BatchRequest';
+import EthereumProviderAdapter from '../adapters/EthereumProviderAdapter';
 
 export default class ProvidersModuleFactory {
     /**
@@ -38,12 +36,13 @@ export default class ProvidersModuleFactory {
      *
      * @method createBatchRequest
      *
+     * @param {AbstractWeb3Module} moduleInstance
      * @param {AbstractProviderAdapter} provider
      *
      * @returns {BatchRequest}
      */
-    createBatchRequest(provider) {
-        return new BatchRequest(provider, JsonRpcMapper, JsonRpcResponseValidator);
+    createBatchRequest(moduleInstance, provider) {
+        return new BatchRequest(moduleInstance, provider);
     }
 
     /**
@@ -135,26 +134,15 @@ export default class ProvidersModuleFactory {
     }
 
     /**
-     * Returns an InpageProviderAdapter object
+     * Returns an EthereumProviderAdapter object
      *
-     * @method createInpageProviderAdapter
+     * @method createEthereumProviderAdapter
      *
-     * @param {Object} provider
+     * @param {EthereumProvider} provider
      *
-     * @returns {InpageProviderAdapter}
+     * @returns {EthereumProviderAdapter}
      */
-    createInpageProviderAdapter(provider) {
-        return new InpageProviderAdapter(provider);
-    }
-
-    /**
-     * Returns an JsonRpcResponseValidator object
-     *
-     * @method createJSONRpcResponseValidator
-     *
-     * @returns {JsonRpcResponseValidator}
-     */
-    createJSONRpcResponseValidator() {
-        return new JsonRpcResponseValidator();
+    createEthereumProviderAdapter(provider) {
+        return new EthereumProviderAdapter(provider);
     }
 }

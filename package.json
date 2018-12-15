@@ -101,6 +101,9 @@
     },
     "dependencies": {
         "@babel/polyfill": "^7.0.0",
-        "chai": "^4.2.0"
+        "chai": "^4.2.0",
+        "@types/bn.js": "^4.11.3",
+        "typescript": "^3.2.2",
+        "@types/node": "^10.12.12"
     }
 }

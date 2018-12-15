@@ -17,6 +17,7 @@
 /**
  * @file httpprovider.js
  * @authors:
+ *   Samuel Furter <samuel@ethereum.org>
  *   Marek Kotewicz <marek@parity.io>
  *   Marian Oancea
  *   Fabian Vogelsteller <fabian@ethereum.org>
@@ -30,6 +31,7 @@ import https from 'https';
 
 export default class HttpProvider {
     /**
+     * TODO: Be sure the fix of the PR #2105 is included!
      * @param {String} host
      * @param {Object} options
      *
@@ -52,12 +54,11 @@ export default class HttpProvider {
     /**
      * Prepares the HTTP request
      *
-     * @private
-     * @method _prepareRequest
+     * @method prepareRequest
      *
-     * @returns {FakeXHR2}
+     * @returns {XMLHttpRequest}
      */
-    _prepareRequest() {
+    prepareRequest() {
         const request = new XMLHttpRequest();
         request.nodejsSet({
             httpsAgent: this.httpsAgent,
@@ -66,7 +67,7 @@ export default class HttpProvider {
 
         request.open('POST', this.host, true);
         request.setRequestHeader('Content-Type', 'application/json');
-        request.timeout = this.timeout && this.timeout !== 1 ? this.timeout : 0;
+        request.timeout = this.timeout || 0;
         request.withCredentials = true;
 
         if (this.headers) {
@@ -89,38 +90,51 @@ export default class HttpProvider {
      * @callback callback callback(error, result)
      */
     send(payload, callback) {
-        const request = this._prepareRequest();
+        const request = this.prepareRequest();
 
         request.onreadystatechange = () => {
-            if (request.readyState === 4 && request.timeout !== 1) {
-                let result = request.responseText;
-
-                try {
-                    result = JSON.parse(result);
-                } catch (error) {
-                    const invalidResponseError = errors.InvalidResponse(request.responseText);
-                    callback(invalidResponseError, result);
-                }
-
+            if (request.readyState !== 0 && request.readyState !== 1) {
                 this.connected = true;
+            }
+
+            if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                try {
+                    callback(
+                        false,
+                        JSON.parse(request.responseText)
+                    );
+                } catch (error) {
+                    callback(
+                        new Error(`Invalid JSON as response: ${request.responseText}`),
+                        false
+                    );
+                }
             }
         };
 
-        request.ontimeout = function() {
+        request.ontimeout = () => {
             this.connected = false;
-            callback(errors.ConnectionTimeout(this.timeout));
+            callback(
+                new Error(`CONNECTION: Timeout exceeded after ${this.timeout}ms`),
+                null
+            );
         };
 
         try {
             request.send(JSON.stringify(payload));
         } catch (error) {
-            this.connected = false;
-            callback(errors.InvalidConnection(this.host));
+            if (error.constructor.name === 'NetworkError') {
+                this.connected = false;
+            }
+
+            callback(error, null);
         }
     }
 
     /**
      * If this method does not exist it will throw en error.
      */
-    disconnect() {}
+    disconnect() {
+        return true;
+    }
 }

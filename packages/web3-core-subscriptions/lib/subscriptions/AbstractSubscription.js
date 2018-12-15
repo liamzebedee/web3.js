@@ -29,8 +29,8 @@ import EventEmitter from 'eventemitter3';
  */
 export default class AbstractSubscription extends EventEmitter {
     /**
-     * @param {String} method
      * @param {String} type
+     * @param {String} method
      * @param {Object} options
      * @param {Utils} utils
      * @param {Object} formatters
@@ -38,10 +38,10 @@ export default class AbstractSubscription extends EventEmitter {
      *
      * @constructor
      */
-    constructor(method, type, options, utils, formatters, moduleInstance) {
+    constructor(type, method, options, utils, formatters, moduleInstance) {
         super();
-        this.method = method;
         this.type = type;
+        this.method = method;
         this.options = options;
         this.utils = utils;
         this.formatters = formatters;
@@ -55,18 +55,17 @@ export default class AbstractSubscription extends EventEmitter {
      * @method beforeSubscription
      *
      * @param {AbstractWeb3Module} moduleInstance
-     * @param {Function} callback
      */
-    beforeSubscription(moduleInstance, callback) {}
+    beforeSubscription(moduleInstance) {}
 
     /**
      * This method will be executed on each new subscription item.
      *
      * @method onNewSubscriptionItem
      *
-     * @param {*} subscriptionItem
+     * @param {any} subscriptionItem
      *
-     * @returns {*}
+     * @returns {any}
      */
     onNewSubscriptionItem(subscriptionItem) {
         return subscriptionItem;
@@ -83,32 +82,33 @@ export default class AbstractSubscription extends EventEmitter {
      * @returns {Subscription} Subscription
      */
     subscribe(callback) {
-        this.beforeSubscription(callback);
+        this.beforeSubscription(this.moduleInstance);
 
         this.moduleInstance.currentProvider
-            .subscribe(this.type, this.method, [
-                this.options
-            ])
-            .then((subscriptionId) => {
+            .subscribe(this.type, this.method, [this.options])
+            .then(subscriptionId => {
                 this.id = subscriptionId;
 
-                this.moduleInstance.currentProvider.on(this.id, (error, response) => {
-                    if (!error) {
-                        this.handleSubscriptionResponse(response, callback);
+                this.moduleInstance.currentProvider.on(
+                    this.id,
+                    (error, response) => {
+                        if (!error) {
+                            this.handleSubscriptionResponse(response, callback);
 
-                        return;
+                            return;
+                        }
+
+                        if (isFunction(callback)) {
+                            callback(error, null);
+                        }
+
+                        this.emit('error', error);
+
+                        if (this.moduleInstance.currentProvider.once) {
+                            this.reconnect(callback);
+                        }
                     }
-
-                    if (self.moduleInstance.currentProvider.once) {
-                        this.reconnect(callback);
-                    }
-
-                    if (isFunction(callback)) {
-                        callback(error, null);
-                    }
-
-                    this.emit('error', error);
-                });
+                );
             });
 
         return this;
@@ -156,20 +156,16 @@ export default class AbstractSubscription extends EventEmitter {
             if (this.moduleInstance.currentProvider.reconnect) {
                 this.moduleInstance.currentProvider.reconnect();
             }
-        }, 500);
+        }, 1000);
 
         this.moduleInstance.currentProvider.once('connect', () => {
             clearInterval(interval);
-            this.unsubscribe()
+            this.unsubscribe(callback)
                 .then(() => {
                     this.subscribe(callback);
                 })
                 .catch((error) => {
                     this.emit('error', error);
-
-                    if (isFunction(callback)) {
-                        callback(error, null);
-                    }
                 });
         });
     }
@@ -182,30 +178,31 @@ export default class AbstractSubscription extends EventEmitter {
      * @param {Function} callback
      *
      * @callback callback callback(error, result)
-     * @returns {Promise<boolean>}
+     * @returns {Promise<Boolean|Error>}
      */
     unsubscribe(callback) {
         return this.moduleInstance.currentProvider
             .unsubscribe(this.id, this.type)
-            .then((response) => {
+            .then(response => {
                 this.removeAllListeners('data');
                 this.removeAllListeners('error');
 
                 if (!response) {
                     this.id = null;
 
+                    const error = new Error('Error on unsubscribe!');
                     if (isFunction(callback)) {
-                        callback(true, false);
+                        callback(error, null);
                     }
 
-                    return true;
+                    throw error;
                 }
 
                 if (isFunction(callback)) {
                     callback(false, true);
                 }
 
-                return false;
+                return true;
             });
     }
 }

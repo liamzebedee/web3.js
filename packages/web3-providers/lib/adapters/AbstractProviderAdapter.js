@@ -22,7 +22,6 @@
 
 import JsonRpcMapper from '../../src/mappers/JsonRpcMapper.js';
 import JsonRpcResponseValidator from '../../src/validators/JsonRpcResponseValidator.js';
-import {errors} from 'web3-core-helpers';
 import EventEmitter from 'eventemitter3';
 
 export default class AbstractProviderAdapter extends EventEmitter {
@@ -48,10 +47,22 @@ export default class AbstractProviderAdapter extends EventEmitter {
      */
     send(method, parameters) {
         const payload = JsonRpcMapper.toPayload(method, parameters);
-
         return new Promise((resolve, reject) => {
             this.provider.send(payload, (error, response) => {
-                this.handleResponse(reject, resolve, error, response, payload);
+                if (error) {
+                    reject(new Error(`Node error: ${JSON.stringify(error)}`));
+
+                    return;
+                }
+
+                const validationResult = JsonRpcResponseValidator.validate(response, payload);
+                if (validationResult) {
+                    resolve(response);
+
+                    return;
+                }
+
+                reject(validationResult);
             });
         });
     }
@@ -61,13 +72,29 @@ export default class AbstractProviderAdapter extends EventEmitter {
      *
      * @method sendBatch
      *
-     * @param {Array} payload
-     * @param {Function} callback
+     * @param {AbstractMethod[]} methods
+     * @param {AbstractWeb3Module} moduleInstance
      *
-     * @callback callback callback(error, result)
+     * @returns Promise<Object|Error>
      */
-    sendBatch(payload, callback) {
-        this.provider.send(payload, callback);
+    sendBatch(methods, moduleInstance) {
+        return new Promise((resolve, reject) => {
+            let payload = [];
+
+            methods.forEach(method => {
+                method.beforeExecution(moduleInstance);
+
+                payload.push(JsonRpcMapper.toPayload(method.rpcMethod, method.parameters));
+            });
+
+            this.provider.send(payload, (error, response) => {
+                if (error) {
+                    reject(error);
+                }
+
+                resolve(response);
+            });
+        });
     }
 
     /**
@@ -94,49 +121,6 @@ export default class AbstractProviderAdapter extends EventEmitter {
         return new Promise((resolve, reject) => {
             reject(new Error(`The current provider does not support subscriptions: ${this.provider.constructor.name}`));
         });
-    }
-
-    /**
-     * Handles the JSON-RPC response
-     *
-     * @method handleResponse
-     *
-     * @param {Function} reject
-     * @param {Function} resolve
-     * @param {Object} error
-     * @param {Object} response
-     * @param {Object} payload
-     */
-    handleResponse(reject, resolve, error, response, payload) {
-        if (response && response.id && payload.id !== response.id) {
-            reject(
-                new Error(
-                    `Wrong response id "${response.id}" (expected: "${payload.id}") in ${JSON.stringify(payload)}`
-                )
-            );
-
-            return;
-        }
-
-        if (response && response.error) {
-            reject(errors.ErrorResponse(response));
-
-            return;
-        }
-
-        if (!JsonRpcResponseValidator.isValid(response.result)) {
-            reject(errors.InvalidResponse(response));
-
-            return;
-        }
-
-        if (!error) {
-            resolve(response.result);
-
-            return;
-        }
-
-        reject(error);
     }
 
     /**

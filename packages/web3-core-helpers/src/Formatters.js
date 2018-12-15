@@ -29,13 +29,15 @@ import * as Utils from 'web3-utils';
 import {Iban} from 'web3-eth-iban';
 
 /**
+ * TODO: This method could be removed because it is just a wrapper for the toBN method of Utils
+ *
  * Should format the output to a object of type BigNumber
  *
  * @method outputBigNumberFormatter
  *
  * @param {String|Number|BigNumber} number
  *
- * @returns {BigNumber} object
+ * @returns {String} number
  */
 export const outputBigNumberFormatter = (number) => {
     return Utils.toBN(number).toString(10);
@@ -53,8 +55,7 @@ export const isPredefinedBlockNumber = (blockNumber) => {
 };
 
 /**
- * Determines if it should use the default block by the given package or not,
- * will map 'genesis' and 'earlist' to '0x0' and runs the inputBlockNumberFormatter.
+ * Determines if it should use the default block by the given package or not.
  *
  * @param {String|Number} blockNumber
  * @param {AbstractWeb3Module} moduleInstance
@@ -64,10 +65,6 @@ export const isPredefinedBlockNumber = (blockNumber) => {
 export const inputDefaultBlockNumberFormatter = (blockNumber, moduleInstance) => {
     if (blockNumber === undefined || blockNumber === null) {
         return moduleInstance.defaultBlock;
-    }
-
-    if (blockNumber === 'genesis' || blockNumber === 'earliest') {
-        return '0x0';
     }
 
     return inputBlockNumberFormatter(blockNumber);
@@ -81,11 +78,7 @@ export const inputDefaultBlockNumberFormatter = (blockNumber, moduleInstance) =>
  * @returns {undefined|Number|String}
  */
 export const inputBlockNumberFormatter = (blockNumber) => {
-    if (blockNumber === undefined) {
-        return undefined;
-    }
-
-    if (isPredefinedBlockNumber(blockNumber)) {
+    if (blockNumber === undefined || blockNumber === null || isPredefinedBlockNumber(blockNumber)) {
         return blockNumber;
     }
 
@@ -103,13 +96,13 @@ export const inputBlockNumberFormatter = (blockNumber) => {
 /**
  * Formats the input of a transaction and converts all values to HEX
  *
- * @method _txInputFormatter
+ * @method txInputFormatter
  *
  * @param {Object} txObject
  *
  * @returns {Object}
  */
-export const _txInputFormatter = (txObject) => {
+export const txInputFormatter = (txObject) => {
     if (txObject.to) {
         // it might be contract creation
         txObject.to = inputAddressFormatter(txObject.to);
@@ -157,7 +150,7 @@ export const _txInputFormatter = (txObject) => {
  * @returns object
  */
 export const inputCallFormatter = (options, moduleInstance) => {
-    options = _txInputFormatter(options);
+    options = txInputFormatter(options);
     let from = moduleInstance.defaultAccount;
 
     if (options.from) {
@@ -179,10 +172,10 @@ export const inputCallFormatter = (options, moduleInstance) => {
  * @param {Object} options
  * @param {AbstractWeb3Module} moduleInstance
  *
- * @returns object
+ * @returns {Object}
  */
 export const inputTransactionFormatter = (options, moduleInstance) => {
-    options = _txInputFormatter(options);
+    options = txInputFormatter(options);
 
     if (!isNumber(options.from) && !isObject(options.from)) {
         if (!options.from) {
@@ -217,30 +210,36 @@ export const inputSignFormatter = (data) => {
  *
  * @method outputTransactionFormatter
  *
- * @param {Object} tx
+ * @param {Object} receipt
  *
  * @returns {Object}
  */
-export const outputTransactionFormatter = (tx) => {
-    if (tx.blockNumber !== null) tx.blockNumber = Utils.hexToNumber(tx.blockNumber);
-    if (tx.transactionIndex !== null) tx.transactionIndex = Utils.hexToNumber(tx.transactionIndex);
-    tx.nonce = Utils.hexToNumber(tx.nonce);
-    tx.gas = Utils.hexToNumber(tx.gas);
-    tx.gasPrice = outputBigNumberFormatter(tx.gasPrice);
-    tx.value = outputBigNumberFormatter(tx.value);
+export const outputTransactionFormatter = (receipt) => {
+    if (receipt.blockNumber !== null) {
+        receipt.blockNumber = Utils.hexToNumber(receipt.blockNumber);
+    }
 
-    if (tx.to && Utils.isAddress(tx.to)) {
+    if (receipt.transactionIndex !== null) {
+        receipt.transactionIndex = Utils.hexToNumber(receipt.transactionIndex);
+    }
+
+    receipt.nonce = Utils.hexToNumber(receipt.nonce);
+    receipt.gas = Utils.hexToNumber(receipt.gas);
+    receipt.gasPrice = outputBigNumberFormatter(receipt.gasPrice);
+    receipt.value = outputBigNumberFormatter(receipt.value);
+
+    if (receipt.to && Utils.isAddress(receipt.to)) {
         // tx.to could be `0x0` or `null` while contract creation
-        tx.to = Utils.toChecksumAddress(tx.to);
+        receipt.to = Utils.toChecksumAddress(receipt.to);
     } else {
-        tx.to = null; // set to `null` if invalid address
+        receipt.to = null; // set to `null` if invalid address
     }
 
-    if (tx.from) {
-        tx.from = Utils.toChecksumAddress(tx.from);
+    if (receipt.from) {
+        receipt.from = Utils.toChecksumAddress(receipt.from);
     }
 
-    return tx;
+    return receipt;
 };
 
 /**
@@ -257,8 +256,14 @@ export const outputTransactionReceiptFormatter = (receipt) => {
         throw new TypeError(`Received receipt is invalid: ${receipt}`);
     }
 
-    if (receipt.blockNumber !== null) receipt.blockNumber = Utils.hexToNumber(receipt.blockNumber);
-    if (receipt.transactionIndex !== null) receipt.transactionIndex = Utils.hexToNumber(receipt.transactionIndex);
+    if (receipt.blockNumber !== null)  {
+        receipt.blockNumber = Utils.hexToNumber(receipt.blockNumber);
+    }
+
+    if (receipt.transactionIndex !== null) {
+        receipt.transactionIndex = Utils.hexToNumber(receipt.transactionIndex);
+    }
+
     receipt.cumulativeGasUsed = Utils.hexToNumber(receipt.cumulativeGasUsed);
     receipt.gasUsed = Utils.hexToNumber(receipt.gasUsed);
 
@@ -287,15 +292,22 @@ export const outputTransactionReceiptFormatter = (receipt) => {
  * @returns {Object}
  */
 export const outputBlockFormatter = (block) => {
-    // transform to number
     block.gasLimit = Utils.hexToNumber(block.gasLimit);
     block.gasUsed = Utils.hexToNumber(block.gasUsed);
     block.size = Utils.hexToNumber(block.size);
     block.timestamp = Utils.hexToNumber(block.timestamp);
-    if (block.number !== null) block.number = Utils.hexToNumber(block.number);
 
-    if (block.difficulty) block.difficulty = outputBigNumberFormatter(block.difficulty);
-    if (block.totalDifficulty) block.totalDifficulty = outputBigNumberFormatter(block.totalDifficulty);
+    if (block.number !== null)  {
+        block.number = Utils.hexToNumber(block.number);
+    }
+
+    if (block.difficulty) {
+        block.difficulty = outputBigNumberFormatter(block.difficulty);
+    }
+
+    if (block.totalDifficulty) {
+        block.totalDifficulty = outputBigNumberFormatter(block.totalDifficulty);
+    }
 
     if (isArray(block.transactions)) {
         block.transactions.forEach((item) => {
@@ -303,7 +315,9 @@ export const outputBlockFormatter = (block) => {
         });
     }
 
-    if (block.miner) block.miner = Utils.toChecksumAddress(block.miner);
+    if (block.miner) {
+        block.miner = Utils.toChecksumAddress(block.miner);
+    }
 
     return block;
 };
@@ -319,17 +333,26 @@ export const outputBlockFormatter = (block) => {
  */
 export const inputLogFormatter = (options) => {
     let toTopic = (value) => {
-        if (value === null || typeof value === 'undefined') return null;
+        if (value === null || typeof value === 'undefined') {
+            return null;
+        }
 
         value = String(value);
 
-        if (value.indexOf('0x') === 0) return value;
-        else return Utils.fromUtf8(value);
+        if (value.indexOf('0x') === 0) {
+            return value;
+        }
+
+        return Utils.fromUtf8(value);
     };
 
-    if (options.fromBlock) options.fromBlock = inputBlockNumberFormatter(options.fromBlock);
+    if (options.fromBlock) {
+        options.fromBlock = inputBlockNumberFormatter(options.fromBlock);
+    }
 
-    if (options.toBlock) options.toBlock = inputBlockNumberFormatter(options.toBlock);
+    if (options.toBlock) {
+        options.toBlock = inputBlockNumberFormatter(options.toBlock);
+    }
 
     // make sure topics, get converted to hex
     options.topics = options.topics || [];
@@ -480,7 +503,9 @@ export const inputAddressFormatter = (address) => {
 
     if (iban.isValid() && iban.isDirect()) {
         return iban.toAddress().toLowerCase();
-    } else if (Utils.isAddress(address)) {
+    }
+
+    if (Utils.isAddress(address)) {
         return `0x${address.toLowerCase().replace('0x', '')}`;
     }
 

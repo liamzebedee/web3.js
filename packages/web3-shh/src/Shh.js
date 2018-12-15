@@ -56,7 +56,7 @@ export default class Shh extends AbstractWeb3Module {
      *
      * @method subscribe
      *
-     * @param {string} method
+     * @param {String} method
      * @param {Object} options
      * @param {Function} callback
      *
@@ -70,6 +70,17 @@ export default class Shh extends AbstractWeb3Module {
         }
 
         throw new Error(`Unknown subscription: ${method}`);
+    }
+
+    /**
+     * Clears all subscriptions and listeners
+     *
+     * @method clearSubscriptions
+     *
+     * @returns {Promise<Boolean|Error>}
+     */
+    clearSubscriptions() {
+        return super.clearSubscriptions('shh_unsubscribe');
     }
 
     /**
